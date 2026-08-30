@@ -33,14 +33,19 @@ def duration_seconds(path: Path) -> float:
     return duration
 
 
-def encode_take(source: Path, folder: Path, target: float, lossless: bool) -> dict[str, Path]:
+def encode_take(source: Path, folder: Path, target: float | None, lossless: bool) -> dict[str, Path]:
     """Trim to the requested length and create MP3, plus FLAC for durable storage."""
     available = duration_seconds(source)
+    automatic = target is None
+    if automatic:
+        if not 10 <= available <= 240.5:
+            raise RuntimeError("Automatic audio is outside the worker duration limit; not truncating")
+        target = available
     if available + 0.05 < target:
         raise RuntimeError(f"ACE-Step generated only {available:.2f}s; requested {target:.2f}s")
     common = [
         "ffmpeg", "-nostdin", "-y", "-hide_banner", "-loglevel", "error", "-i", str(source),
-        "-map", "0:a:0", "-vn", "-t", str(target), "-ac", "2", "-ar", "48000",
+        "-map", "0:a:0", "-vn", *([] if automatic else ["-t", str(target)]), "-ac", "2", "-ar", "48000",
     ]
     mp3 = folder / "stream.mp3"
     run_audio_tool(common + ["-c:a", "libmp3lame", "-b:a", "320k", str(mp3)])

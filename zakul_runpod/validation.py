@@ -6,7 +6,7 @@ from typing import Any
 
 FIELDS = {
     "operation", "prompt", "lyrics", "instrumental", "duration_seconds", "requested_outputs",
-    "seed", "thinking", "bpm", "keyscale", "vocal_language", "output_mode",
+    "max_duration_seconds", "seed", "thinking", "bpm", "keyscale", "vocal_language", "output_mode",
 }
 OPERATIONS = {"health", "warmup", "generate"}
 
@@ -41,7 +41,7 @@ class GenerateRequest:
     prompt: str
     lyrics: str
     instrumental: bool
-    duration: float
+    duration: float | None
     outputs: int
     seed: int
     thinking: bool
@@ -49,6 +49,7 @@ class GenerateRequest:
     keyscale: str
     language: str
     output_mode: str
+    max_duration: float = 240
 
 
 def validate_job(job: Any) -> tuple[str, dict]:
@@ -78,7 +79,8 @@ def parse_generate(data: dict) -> GenerateRequest:
         raise ValueError("Remove lyrics for an instrumental request")
     if not instrumental and (not lyrics or lyrics == "[Instrumental]"):
         raise ValueError("Provide lyrics, or set instrumental=true")
-    duration = number(data.get("duration_seconds"), "duration_seconds", 0.1, 240)
+    raw_duration = data.get("duration_seconds")
+    duration = None if raw_duration == "auto" else number(raw_duration, "duration_seconds", 0.1, 240)
     outputs = number(data.get("requested_outputs", 1), "requested_outputs", 1, 2)
     seed = number(data.get("seed", -1), "seed", -1, 2**31 - 2)
     if outputs != int(outputs) or seed != int(seed):
@@ -86,7 +88,9 @@ def parse_generate(data: dict) -> GenerateRequest:
     mode = data.get("output_mode", "inline")
     if not isinstance(mode, str) or mode not in {"inline", "s3"}:
         raise ValueError("output_mode must be inline or s3")
-    if mode == "inline" and duration > 60:
+    if duration is None and (mode != "s3" or not boolean(data.get("thinking", True), "thinking")):
+        raise ValueError("Auto duration requires S3 output and thinking=true")
+    if mode == "inline" and duration is not None and duration > 60:
         raise ValueError("Inline tests are limited to 60s per take; configure S3 for longer songs")
     bpm = data.get("bpm")
     if bpm is not None:
@@ -102,4 +106,5 @@ def parse_generate(data: dict) -> GenerateRequest:
         prompt, "[Instrumental]" if instrumental else lyrics, instrumental, duration,
         int(outputs), int(seed), boolean(data.get("thinking", True), "thinking"), bpm,
         text(data.get("keyscale", ""), "keyscale", 30), language, mode,
+        number(data.get("max_duration_seconds", 240), "max_duration_seconds", 10, 240),
     )

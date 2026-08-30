@@ -1,5 +1,6 @@
 """Sequential queue orchestration with strict validation and bounded per-job files."""
 
+from dataclasses import replace
 import secrets
 import threading
 from datetime import datetime, timezone
@@ -10,7 +11,7 @@ from pathlib import Path
 from loguru import logger
 
 from . import VERSION
-from .audio import encode_take
+from .audio import encode_take, duration_seconds
 from .config import MODELS, Settings
 from .models import Models
 from .storage import ResultStore
@@ -57,6 +58,11 @@ class QueueWorker:
             return self._generate(request, store, progress)
 
     def _generate(self, request, store: ResultStore, progress: Callable[[str], None]) -> dict:
+        automatic = request.duration is None
+        if automatic:
+            progress("AI is choosing song duration from lyrics and style")
+            planned = self.models.plan_duration(request)
+            request = replace(request, duration=planned)
         tracks = []
         # Only this newly created directory is ever removed. Model weights stay cached.
         with TemporaryDirectory(prefix="job-", dir=self.settings.temporary) as temporary:
@@ -67,9 +73,14 @@ class QueueWorker:
                 progress(f"Generating take {index}/{request.outputs}")
                 source = self.models.generate(request, seed, folder)
                 progress(f"Encoding take {index}/{request.outputs}")
-                assets = encode_take(source, folder, request.duration, request.output_mode == "s3")
+                # Free previews never publish audio beyond their account cap.
+                target = None if automatic else request.duration
+                if request.max_duration < 240:
+                    target = min(duration_seconds(source), request.max_duration, request.duration)
+                assets = encode_take(source, folder, target, request.output_mode == "s3")
                 progress(f"Saving take {index}/{request.outputs}")
-                tracks.append(store.publish(assets, index, request.duration, seed))
+                actual_duration = duration_seconds(assets["flac"]) if automatic else request.duration
+                tracks.append(store.publish(assets, index, actual_duration, seed))
         steps, guidance = MODELS[self.settings.model]
         return {
             "worker_version": VERSION, "operation": "generate", "tracks": tracks,
@@ -78,5 +89,8 @@ class QueueWorker:
             "lm_model": self.settings.lm_model if request.thinking else None,
             "inference_steps": steps, "guidance_scale": guidance,
             "output_mode": request.output_mode,
-            "note": "MP3 may include a small encoder delay; FLAC retains the requested duration.",
+            "duration_mode": "auto" if automatic else "fixed",
+            "max_duration_seconds": request.max_duration,
+            "planned_duration_seconds": request.duration,
+            "note": "MP3 may include encoder delay. Auto mode preserves the generated ending without fixed-length trimming.",
         }

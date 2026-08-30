@@ -89,6 +89,27 @@ class Models:
             raise RuntimeError("Language model initialization failed; check worker logs")
         self.lm = candidate
 
+    def plan_duration(self, request: GenerateRequest) -> float:
+        """Let the loaded ACE-Step LM plan duration; preserve the original lyrics."""
+        from acestep.inference import format_sample
+        from .validation import number
+
+        if self.lm is None:
+            raise RuntimeError("Automatic duration needs the language model")
+        metadata = {"vocal_language": request.language}
+        if request.bpm is not None:
+            metadata["bpm"] = request.bpm
+        result = format_sample(
+            llm_handler=self.lm, caption=request.prompt + (f". Create a short preview with a musical ending, at most {request.max_duration:g} seconds." if request.max_duration < 240 else ""), lyrics=request.lyrics,
+            user_metadata=metadata, temperature=0.68,
+        )
+        if not result.success:
+            raise RuntimeError("AI duration planning failed; no fixed duration was substituted")
+        try:
+            return min(number(result.duration, "AI planned duration", 10, 600 if request.max_duration < 240 else 240), request.max_duration)
+        except ValueError as exc:
+            raise ValueError("AI did not return a duration within 10–240 seconds. Shorten the lyrics or review the worker limit; the song was not truncated.") from exc
+
     def generate(self, request: GenerateRequest, seed: int, folder: Path) -> Path:
         """Generate one lossless source using the uploaded ACE-Step inference interface."""
         from acestep.inference import GenerationConfig, GenerationParams, generate_music
