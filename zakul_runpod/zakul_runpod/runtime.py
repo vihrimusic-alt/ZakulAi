@@ -73,7 +73,11 @@ class QueueWorker:
                 progress(f"Generating take {index}/{request.outputs}")
                 source = self.models.generate(request, seed, folder)
                 progress(f"Encoding take {index}/{request.outputs}")
-                assets = encode_take(source, folder, None if automatic else request.duration, request.output_mode == "s3")
+                # Free previews never publish audio beyond their account cap.
+                target = None if automatic else request.duration
+                if request.max_duration < 240:
+                    target = min(duration_seconds(source), request.max_duration, request.duration)
+                assets = encode_take(source, folder, target, request.output_mode == "s3")
                 progress(f"Saving take {index}/{request.outputs}")
                 actual_duration = duration_seconds(assets["flac"]) if automatic else request.duration
                 tracks.append(store.publish(assets, index, actual_duration, seed))
@@ -86,6 +90,7 @@ class QueueWorker:
             "inference_steps": steps, "guidance_scale": guidance,
             "output_mode": request.output_mode,
             "duration_mode": "auto" if automatic else "fixed",
+            "max_duration_seconds": request.max_duration,
             "planned_duration_seconds": request.duration,
             "note": "MP3 may include encoder delay. Auto mode preserves the generated ending without fixed-length trimming.",
         }

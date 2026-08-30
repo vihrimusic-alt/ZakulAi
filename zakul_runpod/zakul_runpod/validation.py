@@ -6,7 +6,7 @@ from typing import Any
 
 FIELDS = {
     "operation", "prompt", "lyrics", "instrumental", "duration_seconds", "requested_outputs",
-    "seed", "thinking", "bpm", "keyscale", "vocal_language", "output_mode",
+    "max_duration_seconds", "seed", "thinking", "bpm", "keyscale", "vocal_language", "output_mode",
 }
 OPERATIONS = {"health", "warmup", "generate"}
 
@@ -49,6 +49,7 @@ class GenerateRequest:
     keyscale: str
     language: str
     output_mode: str
+    max_duration: float = 240
 
 
 def validate_job(job: Any) -> tuple[str, dict]:
@@ -105,4 +106,5 @@ def parse_generate(data: dict) -> GenerateRequest:
         prompt, "[Instrumental]" if instrumental else lyrics, instrumental, duration,
         int(outputs), int(seed), boolean(data.get("thinking", True), "thinking"), bpm,
         text(data.get("keyscale", ""), "keyscale", 30), language, mode,
+        number(data.get("max_duration_seconds", 240), "max_duration_seconds", 10, 240),
     )

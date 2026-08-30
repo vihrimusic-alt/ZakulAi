@@ -100,13 +100,13 @@ class Models:
         if request.bpm is not None:
             metadata["bpm"] = request.bpm
         result = format_sample(
-            llm_handler=self.lm, caption=request.prompt, lyrics=request.lyrics,
+            llm_handler=self.lm, caption=request.prompt + (f". Create a short preview with a musical ending, at most {request.max_duration:g} seconds." if request.max_duration < 240 else ""), lyrics=request.lyrics,
             user_metadata=metadata, temperature=0.68,
         )
         if not result.success:
             raise RuntimeError("AI duration planning failed; no fixed duration was substituted")
         try:
-            return number(result.duration, "AI planned duration", 10, 240)
+            return min(number(result.duration, "AI planned duration", 10, 600 if request.max_duration < 240 else 240), request.max_duration)
         except ValueError as exc:
             raise ValueError("AI did not return a duration within 10–240 seconds. Shorten the lyrics or review the worker limit; the song was not truncated.") from exc
 
