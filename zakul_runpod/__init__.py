@@ -1,3 +1,2 @@
-"""Standalone RunPod Queue adapter for ACE-Step; no website is required for tests."""
-
-VERSION = "1.0.0"
+"""ZaKul shared music and writing worker."""
+VERSION = "1.2.0"

@@ -110,6 +110,28 @@ class Models:
         except ValueError as exc:
             raise ValueError("AI did not return a duration within 10–240 seconds. Shorten the lyrics or review the worker limit; the song was not truncated.") from exc
 
+    def assist(self, data: dict) -> dict:
+        """Generate actual text with the already-loaded music LM, not templates."""
+        import re
+        from acestep.inference import create_sample
+        action = data["action"]
+        query = data["query"] + "\nMusic caption must describe sound only: no nationalities, countries, artists or singing-language labels. Return original content, not instructions to the user."
+        language = data.get("vocal_language", "unknown")
+        result = create_sample(
+            llm_handler=self.lm, query=query, instrumental=action == "style" and data.get("instrumental", False),
+            vocal_language=None if language == "unknown" else language,
+            temperature=0.95 if action == "style" else 0.88, top_p=0.92,
+        )
+        if not result.success:
+            raise RuntimeError("AI writing failed; no template substituted")
+        caption = str(result.caption or "").strip()
+        caption = re.sub(r"\b(Ukrainian|English|Polish|German|French|Spanish|Portuguese|Russian)(?:[- ]language)?\b", "", caption, flags=re.I)
+        caption = re.sub(r"[ \t]{2,}", " ", caption).strip(" ,.")[:2400]
+        lyrics = str(result.lyrics or "").strip() if action == "lyrics" else ""
+        if not caption or (action == "lyrics" and (len(lyrics) < 80 or len(lyrics)>4096)):
+            raise RuntimeError("AI returned incomplete text; no template substituted")
+        return {"operation":"assist", "caption":caption, "lyrics":lyrics, "model":self.settings.lm_model}
+
     def generate(self, request: GenerateRequest, seed: int, folder: Path) -> Path:
         """Generate one lossless source using the uploaded ACE-Step inference interface."""
         from acestep.inference import GenerationConfig, GenerationParams, generate_music

@@ -57,6 +57,14 @@ def validate_job(job: Any) -> tuple[str, dict]:
     if not isinstance(job, dict) or not isinstance(job.get("input"), dict):
         raise ValueError("Expected a RunPod job with an input object")
     data = job["input"]
+    if data.get("operation") == "assist":
+        if set(data) - {"operation","action","query","vocal_language","instrumental"}: raise ValueError("Unknown assistant fields")
+        if data.get("action") not in {"lyrics","style"}: raise ValueError("Invalid assistant action")
+        if not text(data.get("query"),"query",12000): raise ValueError("query is required")
+        language=text(data.get("vocal_language","unknown"),"vocal_language",12)
+        if language!="unknown" and not (len(language) in {2,3} and language.isascii() and language.isalpha() and language.islower()): raise ValueError("Invalid language")
+        boolean(data.get("instrumental",False),"instrumental")
+        return "assist",data
     unknown = set(data) - FIELDS
     if unknown:
         raise ValueError("Unknown input fields: " + ", ".join(sorted(unknown)))

@@ -51,6 +51,10 @@ class QueueWorker:
             if operation == "warmup":
                 self.models.ensure_loaded(True, progress)
                 return {"worker_version": VERSION, "operation": operation, **self.models.health()}
+            if operation == "assist":
+                self.models.ensure_loaded(True, progress)
+                progress("Writing lyrics and music direction with the language model")
+                return self.models.assist(data)
             request = parse_generate(data)
             job_id = str(job.get("id") or secrets.token_hex(16))
             store = ResultStore(request.output_mode, job_id)
