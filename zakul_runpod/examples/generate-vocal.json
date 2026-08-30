@@ -1,0 +1,18 @@
+{
+  "input": {
+    "operation": "generate",
+    "prompt": "Intimate Ukrainian melodic pop, one soft male singer with clear diction and no rasp, warm piano, gentle bass, natural phrasing, sing the supplied Ukrainian lyrics exactly.",
+    "lyrics": "[Verse]\nТи лиши долоню в моїй руці,\nНам не треба гучних обіцянок.\nЯ навчуся чути твої думки,\nКоли нас обійматиме ранок.\n[Chorus]\nТільки будь, тільки будь біля мене,\nХай стихає усе навкруги.\nЯ тримаю тепло для тебе,\nТи його у собі збережи.",
+    "instrumental": false,
+    "duration_seconds": 30,
+    "requested_outputs": 1,
+    "thinking": true,
+    "vocal_language": "unknown",
+    "seed": 42,
+    "output_mode": "inline"
+  },
+  "policy": {
+    "executionTimeout": 1800000,
+    "ttl": 3600000
+  }
+}

@@ -1,0 +1,5 @@
+# RunPod 1.12 requires tomlkit>=0.15.1, incompatible with this engine's Gradio 6.2.
+# This SDK version retains the standard Queue handler/progress API and resolves with Gradio.
+runpod==1.7.13
+boto3==1.43.66
+loguru==0.7.3

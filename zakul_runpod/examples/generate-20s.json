@@ -1,0 +1,17 @@
+{
+  "input": {
+    "operation": "generate",
+    "prompt": "Solo Ukrainian sopilka wooden flute and an intense deep electric bass groove, clearly audible wooden flute melody, only flute and bass, dry clean recording, 105 BPM. No drums, no guitar, no synth pads, no vocals.",
+    "instrumental": true,
+    "duration_seconds": 20,
+    "requested_outputs": 1,
+    "thinking": false,
+    "bpm": 105,
+    "seed": 42,
+    "output_mode": "inline"
+  },
+  "policy": {
+    "executionTimeout": 1800000,
+    "ttl": 3600000
+  }
+}

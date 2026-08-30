@@ -1,0 +1,17 @@
+{
+  "input": {
+    "operation": "generate",
+    "prompt": "Expressive instrumental piano and electric bass, warm clean production, gentle melodic progression, no singing or spoken voice, 105 BPM.",
+    "instrumental": true,
+    "duration_seconds": 180,
+    "requested_outputs": 2,
+    "thinking": true,
+    "bpm": 105,
+    "seed": -1,
+    "output_mode": "s3"
+  },
+  "policy": {
+    "executionTimeout": 1800000,
+    "ttl": 3600000
+  }
+}

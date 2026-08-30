@@ -1,0 +1,9 @@
+{
+  "input": {
+    "operation": "warmup"
+  },
+  "policy": {
+    "executionTimeout": 1800000,
+    "ttl": 3600000
+  }
+}
