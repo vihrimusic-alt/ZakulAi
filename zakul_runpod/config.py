@@ -9,6 +9,7 @@ MODELS = {
     "acestep-v15-sft": (50, 7.0),
     "acestep-v15-base": (50, 7.0),
     "acestep-v15-xl-turbo": (8, 1.0),
+    "acestep-v15-xl-sft": (50, 7.0),
 }
 LM_MODELS = {"acestep-5Hz-lm-0.6B", "acestep-5Hz-lm-1.7B", "acestep-5Hz-lm-4B"}
 
