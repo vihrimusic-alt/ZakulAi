@@ -87,6 +87,31 @@ class ValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_generate(request(output_mode="local"))
 
+    def test_private_voice_reference_is_accepted(self):
+        token = "a" * 64
+        parsed = parse_generate(request(
+            reference_audio_url="https://zakul-ai.com/api/voice-reference/job-123",
+            reference_audio_token=token,
+        ))
+        self.assertEqual(parsed.reference_audio_token, token)
+        self.assertTrue(parsed.reference_audio_url.endswith("/job-123"))
+
+    def test_reference_url_and_token_are_rejected_unless_both_are_safe(self):
+        token = "a" * 64
+        cases = [
+            {"reference_audio_url": "https://zakul-ai.com/api/voice-reference/job"},
+            {"reference_audio_token": token},
+            {"reference_audio_url": "https://evil.example/api/voice-reference/job",
+             "reference_audio_token": token},
+            {"reference_audio_url": "https://zakul-ai.com/api/voice-reference/job?next=evil",
+             "reference_audio_token": token},
+            {"reference_audio_url": "https://zakul-ai.com/api/voice-reference/job",
+             "reference_audio_token": "A" * 64},
+        ]
+        for fields in cases:
+            with self.subTest(fields=fields), self.assertRaises(ValueError):
+                parse_generate(request(**fields))
+
 
 if __name__ == "__main__":
     unittest.main()
