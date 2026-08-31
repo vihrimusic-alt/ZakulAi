@@ -7,6 +7,14 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from .validation import GenerateRequest
 
 MAX_REFERENCE_BYTES = 25 * 1024 * 1024
+AUDIO_SUFFIXES = {
+    "audio/mpeg": ".mp3",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/webm": ".webm",
+    "audio/mp4": ".m4a",
+    "audio/ogg": ".ogg",
+}
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -30,7 +38,7 @@ def download_reference(
         request.reference_audio_url,
         headers={
             "Authorization": f"Bearer {request.reference_audio_token}",
-            "Accept": "audio/mpeg",
+            "Accept": ", ".join(AUDIO_SUFFIXES),
             "User-Agent": "ZaKul-RunPod-Voice-Reference/1",
         },
         method="GET",
@@ -43,12 +51,13 @@ def download_reference(
         if getattr(response, "status", 200) != 200:
             raise ValueError("Voice reference download was not successful")
         content_type = response.headers.get_content_type()
-        if content_type != "audio/mpeg":
-            raise ValueError("Voice reference must be an MP3 audio file")
+        suffix = AUDIO_SUFFIXES.get(content_type)
+        if not suffix:
+            raise ValueError("Voice reference uses an unsupported audio format")
         declared = int(response.headers.get("Content-Length", "0") or 0)
         if declared > MAX_REFERENCE_BYTES:
             raise ValueError("Voice reference exceeds the 25 MB limit")
-        target = folder / "voice-reference.mp3"
+        target = folder / f"voice-reference{suffix}"
         total = 0
         with target.open("wb") as output:
             while True:
@@ -57,6 +66,7 @@ def download_reference(
                     break
                 total += len(chunk)
                 if total > MAX_REFERENCE_BYTES:
+                    target.unlink(missing_ok=True)
                     raise ValueError("Voice reference exceeds the 25 MB limit")
                 output.write(chunk)
         if total < 1024:
