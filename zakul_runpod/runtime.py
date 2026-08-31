@@ -68,6 +68,7 @@ class QueueWorker:
             planned = self.models.plan_duration(request)
             request = replace(request, duration=planned)
         tracks = []
+        self.settings.prepare()
         # Only this newly created directory is ever removed. Model weights stay cached.
         with TemporaryDirectory(prefix="job-", dir=self.settings.temporary) as temporary:
             root = Path(temporary)
