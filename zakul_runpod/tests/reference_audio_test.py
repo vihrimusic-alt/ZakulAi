@@ -52,15 +52,22 @@ def voice_request():
 
 
 class ReferenceAudioTests(unittest.TestCase):
-    """Only bounded MP3 data from the authenticated endpoint may reach inference."""
+    """Only bounded supported audio from the authenticated endpoint may reach inference."""
 
     def test_success_downloads_mp3_with_bearer_token(self):
         opener = FakeOpener(FakeResponse(b"x" * 2048))
         with tempfile.TemporaryDirectory() as temporary:
             result = download_reference(voice_request(), Path(temporary), opener)
+            self.assertEqual(result.suffix, ".mp3")
             self.assertEqual(result.read_bytes(), b"x" * 2048)
         self.assertEqual(opener.request.get_header("Authorization"), "Bearer " + "a" * 64)
         self.assertEqual(opener.timeout, 30)
+
+    def test_microphone_webm_is_accepted_with_matching_suffix(self):
+        opener = FakeOpener(FakeResponse(b"x" * 2048, "audio/webm"))
+        with tempfile.TemporaryDirectory() as temporary:
+            result = download_reference(voice_request(), Path(temporary), opener)
+            self.assertEqual(result.suffix, ".webm")
 
     def test_request_without_reference_does_not_open_network(self):
         request = parse_generate({
@@ -73,7 +80,7 @@ class ReferenceAudioTests(unittest.TestCase):
 
     def test_wrong_content_type_is_rejected(self):
         opener = FakeOpener(FakeResponse(b"x" * 2048, "text/html"))
-        with tempfile.TemporaryDirectory() as temporary, self.assertRaisesRegex(ValueError, "MP3"):
+        with tempfile.TemporaryDirectory() as temporary, self.assertRaisesRegex(ValueError, "unsupported"):
             download_reference(voice_request(), Path(temporary), opener)
 
     def test_declared_oversize_is_rejected_before_writing(self):
@@ -83,8 +90,9 @@ class ReferenceAudioTests(unittest.TestCase):
 
     def test_too_small_body_is_rejected_and_removed(self):
         opener = FakeOpener(FakeResponse(b"x" * 100))
-        with tempfile.TemporaryDirectory() as temporary, self.assertRaisesRegex(ValueError, "too small"):
-            download_reference(voice_request(), Path(temporary), opener)
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(ValueError, "too small"):
+                download_reference(voice_request(), Path(temporary), opener)
             self.assertFalse((Path(temporary) / "voice-reference.mp3").exists())
 
 
