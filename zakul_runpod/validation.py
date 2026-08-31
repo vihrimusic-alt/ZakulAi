@@ -3,10 +3,12 @@
 import math
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 FIELDS = {
     "operation", "prompt", "lyrics", "instrumental", "duration_seconds", "requested_outputs",
     "max_duration_seconds", "seed", "thinking", "bpm", "keyscale", "vocal_language", "output_mode",
+    "reference_audio_url", "reference_audio_token",
 }
 OPERATIONS = {"health", "warmup", "generate"}
 
@@ -50,6 +52,8 @@ class GenerateRequest:
     language: str
     output_mode: str
     max_duration: float = 240
+    reference_audio_url: str = ""
+    reference_audio_token: str = ""
 
 
 def validate_job(job: Any) -> tuple[str, dict]:
@@ -110,9 +114,22 @@ def parse_generate(data: dict) -> GenerateRequest:
     if language != "unknown" and not (len(language) in {2, 3} and language.isascii()
                                       and language.isalpha() and language.islower()):
         raise ValueError("vocal_language must be a lowercase language code or unknown")
+    reference_url = text(data.get("reference_audio_url", ""), "reference_audio_url", 500)
+    reference_token = text(data.get("reference_audio_token", ""), "reference_audio_token", 64)
+    if bool(reference_url) != bool(reference_token):
+        raise ValueError("reference audio URL and token must be provided together")
+    if reference_url:
+        parsed = urlsplit(reference_url)
+        if (parsed.scheme != "https" or parsed.hostname != "zakul-ai.com"
+                or parsed.username or parsed.password or parsed.query or parsed.fragment
+                or not parsed.path.startswith("/api/voice-reference/")):
+            raise ValueError("reference_audio_url must be a ZaKul HTTPS reference endpoint")
+        if len(reference_token) != 64 or any(char not in "0123456789abcdef" for char in reference_token):
+            raise ValueError("reference_audio_token must be 64 lowercase hexadecimal characters")
     return GenerateRequest(
         prompt, "[Instrumental]" if instrumental else lyrics, instrumental, duration,
         int(outputs), int(seed), boolean(data.get("thinking", True), "thinking"), bpm,
         text(data.get("keyscale", ""), "keyscale", 30), language, mode,
         number(data.get("max_duration_seconds", 240), "max_duration_seconds", 10, 240),
+        reference_url, reference_token,
     )
