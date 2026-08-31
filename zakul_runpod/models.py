@@ -132,8 +132,14 @@ class Models:
             raise RuntimeError("AI returned incomplete text; no template substituted")
         return {"operation":"assist", "caption":caption, "lyrics":lyrics, "model":self.settings.lm_model}
 
-    def generate(self, request: GenerateRequest, seed: int, folder: Path) -> Path:
-        """Generate one lossless source using the uploaded ACE-Step inference interface."""
+    def generate(
+        self,
+        request: GenerateRequest,
+        seed: int,
+        folder: Path,
+        reference_audio: Path | None = None,
+    ) -> Path:
+        """Generate one lossless source, optionally conditioned by private reference audio."""
         from acestep.inference import GenerationConfig, GenerationParams, generate_music
 
         steps, guidance = MODELS[self.settings.model]
@@ -142,6 +148,7 @@ class Models:
         )
         params = GenerationParams(
             task_type="text2music", caption=f"{request.prompt}\n{instruction}",
+            reference_audio=str(reference_audio) if reference_audio else None,
             lyrics=request.lyrics, instrumental=request.instrumental,
             duration=max(10.0, request.duration), bpm=request.bpm, keyscale=request.keyscale,
             vocal_language=request.language, inference_steps=steps, guidance_scale=guidance,
