@@ -14,6 +14,7 @@ from . import VERSION
 from .audio import encode_take, duration_seconds
 from .config import MODELS, Settings
 from .models import Models
+from .reference_audio import download_reference
 from .storage import ResultStore
 from .validation import parse_generate, validate_job
 
@@ -58,7 +59,6 @@ class QueueWorker:
             request = parse_generate(data)
             job_id = str(job.get("id") or secrets.token_hex(16))
             store = ResultStore(request.output_mode, job_id)
-            self.models.ensure_loaded(request.thinking, progress)
             return self._generate(request, store, progress)
 
     def _generate(self, request, store: ResultStore, progress: Callable[[str], None]) -> dict:
@@ -70,12 +70,17 @@ class QueueWorker:
         tracks = []
         # Only this newly created directory is ever removed. Model weights stay cached.
         with TemporaryDirectory(prefix="job-", dir=self.settings.temporary) as temporary:
+            root = Path(temporary)
+            if request.reference_audio_url:
+                progress("Downloading private vocal reference")
+            reference_audio = download_reference(request, root)
+            self.models.ensure_loaded(request.thinking, progress)
             for index in range(1, request.outputs + 1):
                 folder = Path(temporary) / f"take-{index}"
                 folder.mkdir()
                 seed = secrets.randbelow(2**31 - 1) if request.seed == -1 else request.seed + index - 1
                 progress(f"Generating take {index}/{request.outputs}")
-                source = self.models.generate(request, seed, folder)
+                source = self.models.generate(request, seed, folder, reference_audio)
                 progress(f"Encoding take {index}/{request.outputs}")
                 # Free previews never publish audio beyond their account cap.
                 target = None if automatic else request.duration
