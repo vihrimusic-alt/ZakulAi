@@ -63,6 +63,9 @@ class QueueWorker:
 
     def _generate(self, request, store: ResultStore, progress: Callable[[str], None]) -> dict:
         automatic = request.duration is None
+        # Automatic duration is planned by the LM before generation, so a cold
+        # serverless worker must initialize both the music model and LM first.
+        self.models.ensure_loaded(automatic or request.thinking, progress)
         if automatic:
             progress("AI is choosing song duration from lyrics and style")
             planned = self.models.plan_duration(request)
