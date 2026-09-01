@@ -1,0 +1,35 @@
+{
+  "pop": [
+    "pop", "c-pop", "indie pop", "dance pop", "synth-pop", "synthpop",
+    "electropop", "dream pop", "power pop", "pop rock"
+  ],
+  "electronic": [
+    "electronic", "edm", "house", "electro house", "deep house", "techno",
+    "trance", "synthwave", "dubstep", "drum and bass", "future bass",
+    "ambient electronic", "dance"
+  ],
+  "rock": [
+    "rock", "soft rock", "alternative rock", "indie rock", "hard rock",
+    "progressive rock", "punk", "pop punk", "metal", "folk rock"
+  ],
+  "hiphop_rap": [
+    "hip hop", "hip-hop", "rap", "trap", "boom bap", "drill", "r&b",
+    "rnb", "urban"
+  ],
+  "acoustic_ballad": [
+    "ballad", "acoustic", "singer-songwriter", "acoustic pop",
+    "acoustic ballad", "piano ballad"
+  ],
+  "cinematic_orchestral": [
+    "cinematic", "orchestral", "classical", "soundtrack", "film score",
+    "epic orchestral", "chamber music"
+  ],
+  "ambient_lofi": [
+    "ambient", "lo-fi", "lofi", "chillout", "downtempo", "meditation",
+    "atmospheric", "new age"
+  ],
+  "folk_world": [
+    "folk", "indie folk", "country", "bluegrass", "reggae", "latin",
+    "world music", "traditional", "celtic", "afrobeat"
+  ]
+}
