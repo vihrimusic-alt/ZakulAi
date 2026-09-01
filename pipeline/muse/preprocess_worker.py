@@ -119,8 +119,8 @@ def process_archive(
         return False
 
     stem = Path(filename).stem
-    archive = args.work_dir / "archives" / filename
-    dataset = args.work_dir / "datasets" / stem
+    archive = args.work_dir / "archive" / filename
+    dataset = args.work_dir / "dataset" / stem
     tensors = args.work_dir / "tensors" / stem
     summary = args.work_dir / "reports" / f"{stem}.json"
     stage = tensors / ".preprocess_complete"
