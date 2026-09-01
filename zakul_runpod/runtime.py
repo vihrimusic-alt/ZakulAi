@@ -96,13 +96,16 @@ class QueueWorker:
         with TemporaryDirectory(prefix="job-", dir=self.settings.temporary) as temporary:
             root = Path(temporary)
             if request.reference_audio_url:
-                progress("Downloading private vocal reference")
+                progress("Downloading private Remix source" if request.task_type == "cover" else "Downloading private vocal reference")
             reference_audio = download_reference(request, root)
             self.models.ensure_loaded(request.thinking, progress)
+            base_seed = secrets.randbelow(2**31 - request.outputs) if request.seed == -1 else request.seed
             for index in range(1, request.outputs + 1):
                 folder = Path(temporary) / f"take-{index}"
                 folder.mkdir()
-                seed = secrets.randbelow(2**31 - 1) if request.seed == -1 else request.seed + index - 1
+                # Neighboring deterministic seeds keep both Create takes in the
+                # same prompt family while still producing distinct arrangements.
+                seed = base_seed + index - 1
                 progress(f"Generating take {index}/{request.outputs}")
                 source = self.models.generate(request, seed, folder, reference_audio)
                 progress(f"Encoding take {index}/{request.outputs}")
@@ -118,7 +121,7 @@ class QueueWorker:
                 yield {"event": "track_ready", "track": track}
         steps, guidance = MODELS[self.settings.model]
         result = {
-            "worker_version": VERSION, "operation": "generate", "tracks": tracks,
+            "worker_version": VERSION, "operation": "generate", "task_type": request.task_type, "tracks": tracks,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "model": self.settings.model,
             "lm_model": self.settings.lm_model if request.thinking else None,
