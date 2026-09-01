@@ -61,7 +61,27 @@ class QueueWorker:
             store = ResultStore(request.output_mode, job_id)
             return self._generate(request, store, progress)
 
+    def stream(self, job: dict):
+        """Yield each generated take immediately while keeping one RunPod job and GPU worker."""
+        operation, data = validate_job(job)
+        if operation != "generate":
+            yield self.handle(job)
+            return
+        progress = lambda message: report_progress(job, message)
+        with self.lock:
+            request = parse_generate(data)
+            job_id = str(job.get("id") or secrets.token_hex(16))
+            store = ResultStore(request.output_mode, job_id)
+            yield from self._generate_stream(request, store, progress)
+
     def _generate(self, request, store: ResultStore, progress: Callable[[str], None]) -> dict:
+        """Preserve the standard in-process API by consuming streamed take events."""
+        events = list(self._generate_stream(request, store, progress))
+        if not events or events[-1].get("event") != "complete":
+            raise RuntimeError("Generation stream ended without a completion result")
+        return events[-1]["result"]
+
+    def _generate_stream(self, request, store: ResultStore, progress: Callable[[str], None]):
         automatic = request.duration is None
         # Automatic duration is planned by the LM before generation, so a cold
         # serverless worker must initialize both the music model and LM first.
@@ -93,9 +113,11 @@ class QueueWorker:
                 assets = encode_take(source, folder, target, request.output_mode == "s3")
                 progress(f"Saving take {index}/{request.outputs}")
                 actual_duration = duration_seconds(assets["flac"]) if automatic else request.duration
-                tracks.append(store.publish(assets, index, actual_duration, seed))
+                track = store.publish(assets, index, actual_duration, seed)
+                tracks.append(track)
+                yield {"event": "track_ready", "track": track}
         steps, guidance = MODELS[self.settings.model]
-        return {
+        result = {
             "worker_version": VERSION, "operation": "generate", "tracks": tracks,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "model": self.settings.model,
@@ -107,3 +129,4 @@ class QueueWorker:
             "planned_duration_seconds": request.duration,
             "note": "MP3 may include encoder delay. Auto mode preserves the generated ending without fixed-length trimming.",
         }
+        yield {"event": "complete", "result": result}
