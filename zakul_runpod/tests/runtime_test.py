@@ -33,7 +33,7 @@ class RuntimeTests(unittest.TestCase):
         self.temporary.cleanup()
 
     @staticmethod
-    def _fake_generate(request, seed, folder):
+    def _fake_generate(request, seed, folder, reference_audio=None):
         path = folder / "source.wav"
         path.write_bytes(b"placeholder-wav")
         return path
@@ -78,6 +78,18 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(output["inference_steps"], 8)
         self.assertIn("base64", output["tracks"][0]["mp3"])
         self.assertEqual(list(self.settings.temporary.iterdir()), [])
+
+    def test_voice_reference_is_downloaded_before_models_and_passed_to_generation(self):
+        reference = self.settings.temporary / "downloaded-reference.mp3"
+        reference.write_bytes(b"reference")
+        with patch("zakul_runpod.runtime.download_reference", return_value=reference) as download:
+            with patch("zakul_runpod.runtime.encode_take", side_effect=self._fake_encode):
+                self.worker.handle(self._job(
+                    reference_audio_url="https://zakul-ai.com/api/voice-reference/job",
+                    reference_audio_token="a" * 64,
+                ))
+        download.assert_called_once()
+        self.assertEqual(self.worker.models.generate.call_args.args[3], reference)
 
     def test_clip_target_is_not_changed_to_engine_minimum(self):
         with patch("zakul_runpod.runtime.encode_take", side_effect=self._fake_encode) as encode:

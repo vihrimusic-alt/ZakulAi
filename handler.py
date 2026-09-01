@@ -11,9 +11,9 @@ from zakul_runpod.runtime import QueueWorker
 worker = QueueWorker()
 
 
-def handler(job: dict) -> dict:
-    """Run one validated job and publish audio before reporting success."""
-    return worker.handle(job)
+def handler(job: dict):
+    """Stream each completed take while one validated job keeps the GPU worker warm."""
+    yield from worker.stream(job)
 
 
 if __name__ == "__main__":
@@ -22,4 +22,4 @@ if __name__ == "__main__":
     if os.getenv("ZAKUL_PRELOAD_MODELS", "false").lower() == "true":
         worker.models.ensure_loaded(True, lambda message: logger.info("{}",message))
     # A synchronous handler intentionally runs one GPU job at a time.
-    runpod.serverless.start({"handler": handler})
+    runpod.serverless.start({"handler": handler, "return_aggregate_stream": True})

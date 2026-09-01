@@ -78,20 +78,23 @@ class ModelTests(unittest.TestCase):
             self.models.ensure_loaded(True, MagicMock())
         self.assertIsNone(self.models.lm)
 
-    def test_short_duration_and_lyrics_map_to_correct_upstream_fields(self):
+    def test_short_duration_lyrics_and_reference_map_to_upstream_fields(self):
         root = self.settings.root
         output = root / "generated.wav"
         output.write_bytes(b"source")
+        reference = root / "voice-reference.mp3"
+        reference.write_bytes(b"reference")
         generator = MagicMock(return_value=SimpleNamespace(success=True, audios=[{"path": str(output)}]))
         inference = SimpleNamespace(GenerationParams=SimpleNamespace, GenerationConfig=SimpleNamespace,
                                     generate_music=generator)
         request = parse_generate({"prompt": "Bass", "lyrics": "Ти поруч", "instrumental": False,
                                   "duration_seconds": 2.12, "thinking": False})
         with patch.dict(sys.modules, {"acestep.inference": inference}):
-            self.models.generate(request, 123, root)
+            self.models.generate(request, 123, root, reference)
         params, config = generator.call_args.args[2:4]
         self.assertEqual(params.duration, 10)
         self.assertEqual(params.lyrics, "Ти поруч")
+        self.assertEqual(params.reference_audio, str(reference))
         self.assertFalse(params.use_cot_caption)
         self.assertFalse(params.use_cot_metas)
         self.assertEqual(config.batch_size, 1)

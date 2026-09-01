@@ -14,6 +14,7 @@ from . import VERSION
 from .audio import encode_take, duration_seconds
 from .config import MODELS, Settings
 from .models import Models
+from .reference_audio import download_reference
 from .storage import ResultStore
 from .validation import parse_generate, validate_job
 
@@ -58,24 +59,55 @@ class QueueWorker:
             request = parse_generate(data)
             job_id = str(job.get("id") or secrets.token_hex(16))
             store = ResultStore(request.output_mode, job_id)
-            self.models.ensure_loaded(request.thinking, progress)
             return self._generate(request, store, progress)
 
+    def stream(self, job: dict):
+        """Yield each generated take immediately while keeping one RunPod job and GPU worker."""
+        operation, data = validate_job(job)
+        if operation != "generate":
+            yield self.handle(job)
+            return
+        progress = lambda message: report_progress(job, message)
+        with self.lock:
+            request = parse_generate(data)
+            job_id = str(job.get("id") or secrets.token_hex(16))
+            store = ResultStore(request.output_mode, job_id)
+            yield from self._generate_stream(request, store, progress)
+
     def _generate(self, request, store: ResultStore, progress: Callable[[str], None]) -> dict:
+        """Preserve the standard in-process API by consuming streamed take events."""
+        events = list(self._generate_stream(request, store, progress))
+        if not events or events[-1].get("event") != "complete":
+            raise RuntimeError("Generation stream ended without a completion result")
+        return events[-1]["result"]
+
+    def _generate_stream(self, request, store: ResultStore, progress: Callable[[str], None]):
         automatic = request.duration is None
+        # Automatic duration is planned by the LM before generation, so a cold
+        # serverless worker must initialize both the music model and LM first.
+        self.models.ensure_loaded(automatic or request.thinking, progress)
         if automatic:
             progress("AI is choosing song duration from lyrics and style")
             planned = self.models.plan_duration(request)
             request = replace(request, duration=planned)
         tracks = []
+        self.settings.prepare()
         # Only this newly created directory is ever removed. Model weights stay cached.
         with TemporaryDirectory(prefix="job-", dir=self.settings.temporary) as temporary:
+            root = Path(temporary)
+            if request.reference_audio_url:
+                progress("Downloading private Remix source" if request.task_type == "cover" else "Downloading private vocal reference")
+            reference_audio = download_reference(request, root)
+            self.models.ensure_loaded(request.thinking, progress)
+            base_seed = secrets.randbelow(2**31 - request.outputs) if request.seed == -1 else request.seed
             for index in range(1, request.outputs + 1):
                 folder = Path(temporary) / f"take-{index}"
                 folder.mkdir()
-                seed = secrets.randbelow(2**31 - 1) if request.seed == -1 else request.seed + index - 1
+                # Neighboring deterministic seeds keep both Create takes in the
+                # same prompt family while still producing distinct arrangements.
+                seed = base_seed + index - 1
                 progress(f"Generating take {index}/{request.outputs}")
-                source = self.models.generate(request, seed, folder)
+                source = self.models.generate(request, seed, folder, reference_audio)
                 progress(f"Encoding take {index}/{request.outputs}")
                 # Free previews never publish audio beyond their account cap.
                 target = None if automatic else request.duration
@@ -84,10 +116,12 @@ class QueueWorker:
                 assets = encode_take(source, folder, target, request.output_mode == "s3")
                 progress(f"Saving take {index}/{request.outputs}")
                 actual_duration = duration_seconds(assets["flac"]) if automatic else request.duration
-                tracks.append(store.publish(assets, index, actual_duration, seed))
+                track = store.publish(assets, index, actual_duration, seed)
+                tracks.append(track)
+                yield {"event": "track_ready", "track": track}
         steps, guidance = MODELS[self.settings.model]
-        return {
-            "worker_version": VERSION, "operation": "generate", "tracks": tracks,
+        result = {
+            "worker_version": VERSION, "operation": "generate", "task_type": request.task_type, "tracks": tracks,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "model": self.settings.model,
             "lm_model": self.settings.lm_model if request.thinking else None,
@@ -98,3 +132,4 @@ class QueueWorker:
             "planned_duration_seconds": request.duration,
             "note": "MP3 may include encoder delay. Auto mode preserves the generated ending without fixed-length trimming.",
         }
+        yield {"event": "complete", "result": result}
