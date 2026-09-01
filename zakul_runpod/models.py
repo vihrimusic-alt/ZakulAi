@@ -146,15 +146,20 @@ class Models:
         instruction = "Strictly instrumental, no singing or speech." if request.instrumental else (
             "Sing the supplied lyrics verbatim in their original language; do not translate."
         )
+        if request.task_type == "cover":
+            instruction += " Preserve the source timing, melodic identity and structure while applying the requested new production."
         params = GenerationParams(
-            task_type="text2music", caption=f"{request.prompt}\n{instruction}",
-            reference_audio=str(reference_audio) if reference_audio else None,
+            task_type=request.task_type, caption=f"{request.prompt}\n{instruction}",
+            reference_audio=str(reference_audio) if reference_audio and request.task_type == "text2music" else None,
+            src_audio=str(reference_audio) if reference_audio and request.task_type == "cover" else None,
             lyrics=request.lyrics, instrumental=request.instrumental,
             duration=max(10.0, request.duration), bpm=request.bpm, keyscale=request.keyscale,
             vocal_language=request.language, inference_steps=steps, guidance_scale=guidance,
             shift=3.0, seed=seed, thinking=request.thinking,
             use_cot_caption=False, use_cot_language=False, use_cot_metas=False,
-            lm_temperature=0.68, lm_cfg_scale=2.5, lm_top_p=0.9,
+            audio_cover_strength=request.audio_cover_strength,
+            cover_noise_strength=request.cover_noise_strength,
+            lm_temperature=0.55, lm_cfg_scale=2.5, lm_top_p=0.88,
         )
         config = GenerationConfig(
             batch_size=1, allow_lm_batch=False, use_random_seed=False,
