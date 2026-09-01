@@ -59,9 +59,10 @@ class BuildCatalogTest(unittest.TestCase):
             source.write_text(json.dumps(record) + "\n", encoding="utf-8")
 
             summary = build_catalog([source], {"pop": {"pop"}}, output)
+            output_content = output.read_text(encoding="utf-8")
 
         self.assertEqual(summary["counts"]["excluded_source_error"], 1)
-        self.assertEqual(output.read_text(encoding="utf-8"), "")
+        self.assertEqual(output_content, "")
 
     def test_song_split_is_stable(self) -> None:
         """Keep all track variants for the same song in one split."""
