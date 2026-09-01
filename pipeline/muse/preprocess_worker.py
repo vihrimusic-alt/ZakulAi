@@ -9,6 +9,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from pipeline.muse.build_tensor_index import build_tensor_index
 from pipeline.muse.mirror_archives import archive_names, head_object
 from pipeline.muse.publish_catalog import required_environment
 from pipeline.muse.r2_transfer import (
@@ -83,6 +84,7 @@ def publish_result(
     filename: str,
     tensors: Path,
     summary: Path,
+    index: Path,
     args: argparse.Namespace,
     config: dict[str, str],
 ) -> None:
@@ -90,6 +92,7 @@ def publish_result(
     prefix = f"{OUTPUT_PREFIX}/{Path(filename).stem}"
     upload_directory(tensors, prefix, config, args.aws_path)
     upload_file(summary, f"{prefix}/summary.json", config, args.aws_path)
+    upload_file(index, f"{prefix}/training_index.jsonl", config, args.aws_path)
     success = args.work_dir / "reports" / f"{Path(filename).stem}.success.json"
     success.write_text(
         json.dumps({"archive": filename, "status": "complete"}, indent=2) + "\n",
@@ -123,6 +126,7 @@ def process_archive(
     dataset = args.work_dir / "dataset" / stem
     tensors = args.work_dir / "tensors" / stem
     summary = args.work_dir / "reports" / f"{stem}.json"
+    index = args.work_dir / "reports" / f"{stem}.training_index.jsonl"
     stage = tensors / ".preprocess_complete"
 
     if not archive.exists():
@@ -137,8 +141,9 @@ def process_archive(
         tensors.mkdir(parents=True, exist_ok=True)
         preprocess(dataset, tensors, args.ace_dir, args.max_duration)
         stage.touch()
+    build_tensor_index(args.catalog, tensors, index)
 
-    publish_result(filename, tensors, summary, args, config)
+    publish_result(filename, tensors, summary, index, args, config)
     archive.unlink(missing_ok=True)
     shutil.rmtree(dataset, ignore_errors=True)
     shutil.rmtree(tensors, ignore_errors=True)
