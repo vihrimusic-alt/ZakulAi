@@ -6,9 +6,9 @@ from typing import Any
 from urllib.parse import urlsplit
 
 FIELDS = {
-    "operation", "prompt", "lyrics", "instrumental", "duration_seconds", "requested_outputs",
+    "operation", "task_type", "prompt", "lyrics", "instrumental", "duration_seconds", "requested_outputs",
     "max_duration_seconds", "seed", "thinking", "bpm", "keyscale", "vocal_language", "output_mode",
-    "reference_audio_url", "reference_audio_token",
+    "reference_audio_url", "reference_audio_token", "audio_cover_strength", "cover_noise_strength",
 }
 OPERATIONS = {"health", "warmup", "generate"}
 
@@ -40,6 +40,7 @@ def text(value: Any, name: str, limit: int) -> str:
 class GenerateRequest:
     """Normalized request; short clips are generated at 10s then trimmed."""
 
+    task_type: str
     prompt: str
     lyrics: str
     instrumental: bool
@@ -54,6 +55,8 @@ class GenerateRequest:
     max_duration: float = 240
     reference_audio_url: str = ""
     reference_audio_token: str = ""
+    audio_cover_strength: float = 1.0
+    cover_noise_strength: float = 0.0
 
 
 def validate_job(job: Any) -> tuple[str, dict]:
@@ -82,6 +85,9 @@ def validate_job(job: Any) -> tuple[str, dict]:
 
 def parse_generate(data: dict) -> GenerateRequest:
     """Require an explicit duration; reject unsupported requests before generation."""
+    task_type = text(data.get("task_type", "text2music"), "task_type", 20)
+    if task_type not in {"text2music", "cover"}:
+        raise ValueError("task_type must be text2music or cover")
     prompt = text(data.get("prompt", ""), "prompt", 2400)
     if not prompt:
         raise ValueError("prompt is required")
@@ -97,6 +103,8 @@ def parse_generate(data: dict) -> GenerateRequest:
     seed = number(data.get("seed", -1), "seed", -1, 2**31 - 2)
     if outputs != int(outputs) or seed != int(seed):
         raise ValueError("requested_outputs and seed must be integers")
+    if task_type == "cover" and int(outputs) != 1:
+        raise ValueError("cover generates exactly one output")
     mode = data.get("output_mode", "inline")
     if not isinstance(mode, str) or mode not in {"inline", "s3"}:
         raise ValueError("output_mode must be inline or s3")
@@ -120,16 +128,25 @@ def parse_generate(data: dict) -> GenerateRequest:
         raise ValueError("reference audio URL and token must be provided together")
     if reference_url:
         parsed = urlsplit(reference_url)
+        expected_path = "/api/remix-reference/" if task_type == "cover" else "/api/voice-reference/"
         if (parsed.scheme != "https" or parsed.hostname != "zakul-ai.com"
                 or parsed.username or parsed.password or parsed.query or parsed.fragment
-                or not parsed.path.startswith("/api/voice-reference/")):
+                or not parsed.path.startswith(expected_path)):
             raise ValueError("reference_audio_url must be a ZaKul HTTPS reference endpoint")
         if len(reference_token) != 64 or any(char not in "0123456789abcdef" for char in reference_token):
             raise ValueError("reference_audio_token must be 64 lowercase hexadecimal characters")
+    if task_type == "cover" and not reference_url:
+        raise ValueError("cover requires a private source audio URL")
+    cover_strength = number(data.get("audio_cover_strength", 1.0), "audio_cover_strength", 0.0, 1.0)
+    cover_noise = number(data.get("cover_noise_strength", 0.0), "cover_noise_strength", 0.0, 1.0)
     return GenerateRequest(
-        prompt, "[Instrumental]" if instrumental else lyrics, instrumental, duration,
-        int(outputs), int(seed), boolean(data.get("thinking", True), "thinking"), bpm,
-        text(data.get("keyscale", ""), "keyscale", 30), language, mode,
-        number(data.get("max_duration_seconds", 240), "max_duration_seconds", 10, 240),
-        reference_url, reference_token,
+        task_type=task_type, prompt=prompt,
+        lyrics="[Instrumental]" if instrumental else lyrics, instrumental=instrumental,
+        duration=duration, outputs=int(outputs), seed=int(seed),
+        thinking=boolean(data.get("thinking", True), "thinking"), bpm=bpm,
+        keyscale=text(data.get("keyscale", ""), "keyscale", 30), language=language,
+        output_mode=mode,
+        max_duration=number(data.get("max_duration_seconds", 240), "max_duration_seconds", 10, 240),
+        reference_audio_url=reference_url, reference_audio_token=reference_token,
+        audio_cover_strength=cover_strength, cover_noise_strength=cover_noise,
     )
