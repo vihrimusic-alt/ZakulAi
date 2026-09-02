@@ -11,6 +11,7 @@ from pathlib import Path
 
 from pipeline.muse.build_tensor_index import build_tensor_index
 from pipeline.muse.mirror_archives import archive_names, head_object
+from pipeline.muse.mirror_shard import selected_names
 from pipeline.muse.publish_catalog import required_environment
 from pipeline.muse.r2_transfer import (
     download_file,
@@ -162,6 +163,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-duration", type=int, default=240)
     parser.add_argument("--poll-seconds", type=int, default=60)
     parser.add_argument("--retry-seconds", type=int, default=30)
+    parser.add_argument("--language", choices=("cn", "en"))
+    parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument("--shard-count", type=int, default=1)
     return parser.parse_args()
 
 
@@ -170,7 +174,10 @@ def main() -> None:
     args = parse_args()
     args.work_dir.mkdir(parents=True, exist_ok=True)
     config = required_environment(os.environ)
-    for filename in archive_names():
+    names = archive_names()
+    if args.language:
+        names = selected_names(args.language, args.shard_index, args.shard_count)
+    for filename in names:
         while True:
             try:
                 if process_archive(filename, args, config):
