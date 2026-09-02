@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from pipeline.muse.mirror_archives import aws_environment
+from pipeline.muse.mirror_archives import aws_environment, head_object
 
 
 def run(command: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
@@ -86,7 +86,20 @@ def load_manifest(
     config: dict[str, str],
     aws_path: str,
 ) -> dict[str, Any]:
-    """Download and parse the verified raw-archive manifest."""
-    path = work_dir / "archive_manifest.json"
-    download_file(f"{raw_prefix}/archive_manifest.json", path, config, aws_path)
-    return json.loads(path.read_text(encoding="utf-8"))
+    """Download and merge manifests published by independent archive workers."""
+    names = (
+        "archive_manifest.json",
+        "archive_manifest-en-odd.json",
+        "archive_manifest-en-even.json",
+    )
+    merged: dict[str, Any] = {}
+    for name in names:
+        key = f"{raw_prefix}/{name}"
+        if not head_object(key, config, aws_path):
+            continue
+        path = work_dir / name
+        download_file(key, path, config, aws_path)
+        merged.update(json.loads(path.read_text(encoding="utf-8")))
+    if not merged:
+        raise RuntimeError("No archive manifests are available in R2")
+    return merged
