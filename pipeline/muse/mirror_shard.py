@@ -19,13 +19,26 @@ from pipeline.muse.publish_catalog import required_environment
 from pipeline.muse.r2_transfer import download_file, upload_file
 
 
-def selected_names(language: str, shard_index: int, shard_count: int) -> list[str]:
-    """Return one deterministic language shard without overlap."""
+def selected_names(
+    language: str,
+    shard_index: int,
+    shard_count: int,
+    part_from: int = 1,
+    part_to: int = 999,
+) -> list[str]:
+    """Return one deterministic, bounded language shard without overlap."""
     if shard_count < 1 or not 0 <= shard_index < shard_count:
         raise ValueError("shard-index must be between zero and shard-count minus one")
-    prefix = f"{language}_"
+    if part_from < 1 or part_to < part_from:
+        raise ValueError("part range is invalid")
+    prefix = f"{language}_part"
     names = [name for name in archive_names() if name.startswith(prefix)]
-    return names[shard_index::shard_count]
+    bounded = [
+        name
+        for name in names
+        if part_from <= int(name.split("_part", 1)[1].split("_", 1)[0]) <= part_to
+    ]
+    return bounded[shard_index::shard_count]
 
 
 def load_entries(
@@ -52,7 +65,13 @@ def mirror_shard(args: argparse.Namespace) -> None:
     manifest_path = args.work_dir / args.manifest_name
     entries = load_entries(args.work_dir, manifest_key, config, args.aws_path)
 
-    for filename in selected_names(args.language, args.shard_index, args.shard_count):
+    for filename in selected_names(
+        args.language,
+        args.shard_index,
+        args.shard_count,
+        args.part_from,
+        args.part_to,
+    ):
         key = f"{R2_PREFIX}/{filename}"
         remote = head_object(key, config, args.aws_path)
         entry = entries.get(filename)
@@ -102,6 +121,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--shard-index", type=int, required=True)
     parser.add_argument("--shard-count", type=int, required=True)
     parser.add_argument("--manifest-name", required=True)
+    parser.add_argument("--part-from", type=int, default=1)
+    parser.add_argument("--part-to", type=int, default=999)
     parser.add_argument("--aws-path", default="/usr/local/bin/aws")
     return parser.parse_args()
 
